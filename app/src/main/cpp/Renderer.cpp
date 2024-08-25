@@ -6,6 +6,11 @@
 #include <vector>
 #include <android/imagedecoder.h>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/transform.hpp>
+
 #include "AndroidOut.h"
 #include "Shader.h"
 #include "Utility.h"
@@ -38,16 +43,19 @@ aout << std::endl;\
 
 // Vertex shader, you'd typically load this from assets
 static const char *vertex = R"vertex(#version 300 es
-in vec3 inPosition;
-in vec2 inUV;
+layout (location=0) in vec3 aPosition;
+layout (location=1) in vec3 aNormal;
+layout (location=2) in vec2 aTexCoord;
+layout (location=3) in vec3 aTangent;
 
 out vec2 fragUV;
 
 uniform mat4 uProjection;
-
+uniform mat4 uView;
 void main() {
-    fragUV = inUV;
-    gl_Position = uProjection * vec4(inPosition, 1.0);
+    vec4 position = vec4(aPosition.xyz, 1.0);
+    fragUV = aTexCoord;
+    gl_Position = uProjection * uView * position;
 }
 )vertex";
 
@@ -82,7 +90,7 @@ static constexpr float kProjectionNearPlane = -1.f;
  * The far plane distance for the projection matrix. Since this is an orthographic porjection
  * matrix, it's convenient to have the far plane equidistant from 0 as the near plane.
  */
-static constexpr float kProjectionFarPlane = 1.f;
+static constexpr float kProjectionFarPlane = 10000.f;
 
 Renderer::~Renderer() {
     if (display_ != EGL_NO_DISPLAY) {
@@ -98,53 +106,6 @@ Renderer::~Renderer() {
         eglTerminate(display_);
         display_ = EGL_NO_DISPLAY;
     }
-}
-
-void Renderer::render() {
-    // Check to see if the surface has changed size. This is _necessary_ to do every frame when
-    // using immersive mode as you'll get no other notification that your renderable area has
-    // changed.
-    updateRenderArea();
-
-    // When the renderable area changes, the projection matrix has to also be updated. This is true
-    // even if you change from the sample orthographic projection matrix as your aspect ratio has
-    // likely changed.
-    if (shaderNeedsNewProjectionMatrix_) {
-        // a placeholder projection matrix allocated on the stack. Column-major memory layout
-        float projectionMatrix[16] = {0};
-
-        // build an orthographic projection matrix for 2d rendering
-        Utility::buildOrthographicMatrix(
-                projectionMatrix,
-                kProjectionHalfHeight,
-                float(width_) / height_,
-                kProjectionNearPlane,
-                kProjectionFarPlane);
-
-        // send the matrix to the shader
-        // Note: the shader must be active for this to work. Since we only have one shader for this
-        // demo, we can assume that it's active.
-        shader_->setProjectionMatrix(projectionMatrix);
-
-        // make sure the matrix isn't generated every frame
-        shaderNeedsNewProjectionMatrix_ = false;
-    }
-
-    // clear the color buffer
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    // Render all the models. There's no depth testing in this sample so they're accepted in the
-    // order provided. But the sample EGL setup requests a 24 bit depth buffer so you could
-    // configure it at the end of initRenderer
-    if (!models_.empty()) {
-        for (const auto &model: models_) {
-            shader_->drawModel(model);
-        }
-    }
-
-    // Present the rendered image. This is an implicit glFlush.
-    auto swapResult = eglSwapBuffers(display_, surface_);
-    assert(swapResult == EGL_TRUE);
 }
 
 void Renderer::initRenderer() {
@@ -221,7 +182,7 @@ void Renderer::initRenderer() {
     PRINT_GL_STRING_AS_LIST(GL_EXTENSIONS);
 
     shader_ = std::unique_ptr<Shader>(
-            Shader::loadShader(vertex, fragment, "inPosition", "inUV", "uProjection"));
+            Shader::loadShader(vertex, fragment, "aPosition", "aTexCoord", "uProjection", "uView"));
     assert(shader_);
 
     // Note: there's only one shader in this demo, so I'll activate it here. For a more complex game
@@ -283,10 +244,11 @@ void Renderer::createModels() {
     // Note: there is no texture management in this sample, so if you reuse an image be careful not
     // to load it repeatedly. Since you get a shared_ptr you can safely reuse it in many models.
     auto assetManager = app_->activity->assetManager;
-    auto spAndroidRobotTexture = TextureAsset::loadAsset(assetManager, "android_robot.png");
+    BaseColor = TextureAsset::loadAsset(assetManager, "amenemhat/amenemhat.jpg");
 
     // Create a model and put it in the back of the render list.
-    models_.emplace_back(vertices, indices, spAndroidRobotTexture);
+//    models_.emplace_back(vertices, indices, spAndroidRobotTexture);
+    models.push_back(FModel::LoadAsset(assetManager, "amenemhat/amenemhat.obj"));
 }
 
 void Renderer::handleInput() {
@@ -375,4 +337,61 @@ void Renderer::handleInput() {
     }
     // clear the key input count too.
     android_app_clear_key_events(inputBuffer);
+}
+
+void Renderer::render() {
+    // Check to see if the surface has changed size. This is _necessary_ to do every frame when
+    // using immersive mode as you'll get no other notification that your renderable area has
+    // changed.
+    updateRenderArea();
+
+    // When the renderable area changes, the projection matrix has to also be updated. This is true
+    // even if you change from the sample orthographic projection matrix as your aspect ratio has
+    // likely changed.
+    if (shaderNeedsNewProjectionMatrix_) {
+        // a placeholder projection matrix allocated on the stack. Column-major memory layout
+//        float projectionMatrix[16] = {0};
+
+        // build an orthographic projection matrix for 2d rendering
+//        Utility::buildOrthographicMatrix(
+//                projectionMatrix,
+//                kProjectionHalfHeight,
+//                float(width_) / height_,
+//                kProjectionNearPlane,
+//                kProjectionFarPlane);
+        glm::mat4 projectionMatrix = glm::perspective(glm::radians(90.0f), float(width_) / height_, 0.1f, 10000.0f);
+
+        // send the matrix to the shader
+        // Note: the shader must be active for this to work. Since we only have one shader for this
+        // demo, we can assume that it's active.
+        shader_->setProjectionMatrix(glm::value_ptr(projectionMatrix));
+
+        // make sure the matrix isn't generated every frame
+        shaderNeedsNewProjectionMatrix_ = false;
+    }
+    glm::mat4 View = glm::translate(glm::vec3(0, 0, -5.0));
+    shader_->setViewMatrix(glm::value_ptr(View));
+    // clear the color buffer
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    // Render all the models. There's no depth testing in this sample so they're accepted in the
+    // order provided. But the sample EGL setup requests a 24 bit depth buffer so you could
+    // configure it at the end of initRenderer
+//    if (!models_.empty()) {
+//        for (const auto &model: models_) {
+//            shader_->drawModel(model);
+//        }
+//    }
+
+    for (const auto& model : models)
+    {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, BaseColor->getTextureID());
+        model->Draw();
+    }
+
+    // Present the rendered image. This is an implicit glFlush.
+    auto swapResult = eglSwapBuffers(display_, surface_);
+    assert(swapResult == EGL_TRUE);
 }

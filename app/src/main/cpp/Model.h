@@ -2,11 +2,10 @@
 #define ANDROIDGLINVESTIGATIONS_MODEL_H
 
 #include <vector>
+#include <filesystem>
+#include <glm/glm.hpp>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
-#include <assimp/postprocess.h>
-#include <assimp/pbrmaterial.h>
-#include <glm/glm.hpp>
 #include "TextureAsset.h"
 
 union Vector3 {
@@ -35,6 +34,7 @@ struct Vertex {
 };
 
 typedef uint16_t Index;
+
 
 class Model {
 public:
@@ -67,5 +67,41 @@ private:
     std::vector<Index> indices_;
     std::shared_ptr<TextureAsset> spTexture_;
 };
+
+struct FVertex
+{
+    glm::vec3 pos;
+    glm::vec3 normal;
+    glm::vec2 uv0;
+    glm::vec3 tangent;
+    glm::vec3 color;
+};
+
+struct Mesh
+{
+    int materialIndex = -1;
+    int vertexCount;
+    int indexOffset;
+    int indexCount;
+};
+
+class FModel {
+public:
+    static std::shared_ptr<FModel> LoadAsset(AAssetManager *assetManager, const std::string &assetPath);
+
+    void Load(const void *InBuffer, size_t InLength);
+    void GenerateVAO();
+    void Draw();
+private:
+    void ProcessNode(aiNode* node, const aiScene* scene);
+    void ProcessMesh(aiMesh* mesh, const aiScene* scene);
+    GLuint vao;
+    std::filesystem::path mModelDir;
+    std::string mFileName;
+    std::vector<Mesh> mMeshes;
+    std::vector<uint> indices;
+    std::vector<FVertex> vertices;
+};
+
 
 #endif //ANDROIDGLINVESTIGATIONS_MODEL_H

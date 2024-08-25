@@ -13,6 +13,7 @@ add_library(androidexample SHARED
         Renderer.cpp
         Shader.cpp
         TextureAsset.cpp
+        Model.cpp
         Utility.cpp)
 
 # Searches for a package provided by the game activity dependency
@@ -33,3 +34,4 @@ target_link_libraries(androidexample
         jnigraphics
         android
         log)
+

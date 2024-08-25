@@ -69,6 +69,9 @@ private:
 
     std::unique_ptr<Shader> shader_;
     std::vector<Model> models_;
+    std::vector<std::shared_ptr<FModel>> models;
+
+    std::shared_ptr<TextureAsset> BaseColor;
 };
 
 #endif //ANDROIDGLINVESTIGATIONS_RENDERER_H

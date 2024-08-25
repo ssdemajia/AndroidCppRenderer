@@ -9,7 +9,8 @@ Shader *Shader::loadShader(
         const std::string &fragmentSource,
         const std::string &positionAttributeName,
         const std::string &uvAttributeName,
-        const std::string &projectionMatrixUniformName) {
+        const std::string &projectionMatrixUniformName,
+        const std::string &viewMatrixUniformName) {
     Shader *shader = nullptr;
 
     GLuint vertexShader = loadShader(GL_VERTEX_SHADER, vertexSource);
@@ -52,7 +53,9 @@ Shader *Shader::loadShader(
             GLint projectionMatrixUniform = glGetUniformLocation(
                     program,
                     projectionMatrixUniformName.c_str());
-
+            GLint viewMatrixUniform = glGetUniformLocation(
+                    program,
+                    viewMatrixUniformName.c_str());
             // Only create a new shader if all the attributes are found.
             if (positionAttribute != -1
                 && uvAttribute != -1
@@ -62,7 +65,8 @@ Shader *Shader::loadShader(
                         program,
                         positionAttribute,
                         uvAttribute,
-                        projectionMatrixUniform);
+                        projectionMatrixUniform,
+                        viewMatrixUniform);
             } else {
                 glDeleteProgram(program);
             }
@@ -151,4 +155,9 @@ void Shader::drawModel(const Model &model) const {
 
 void Shader::setProjectionMatrix(float *projectionMatrix) const {
     glUniformMatrix4fv(projectionMatrix_, 1, false, projectionMatrix);
+}
+
+void Shader::setViewMatrix(float* InViewMatrix) const
+{
+    glUniformMatrix4fv(viewMatrix_, 1, false, InViewMatrix);
 }

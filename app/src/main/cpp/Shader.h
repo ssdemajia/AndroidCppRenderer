@@ -32,7 +32,8 @@ public:
             const std::string &fragmentSource,
             const std::string &positionAttributeName,
             const std::string &uvAttributeName,
-            const std::string &projectionMatrixUniformName);
+            const std::string &projectionMatrixUniformName,
+            const std::string &viewMatrixUniformName);
 
     inline ~Shader() {
         if (program_) {
@@ -63,6 +64,7 @@ public:
      */
     void setProjectionMatrix(float *projectionMatrix) const;
 
+    void setViewMatrix(float* InViewMatrix) const;
 private:
     /*!
      * Helper function to load a shader of a given type
@@ -83,16 +85,20 @@ private:
             GLuint program,
             GLint position,
             GLint uv,
-            GLint projectionMatrix)
+            GLint projectionMatrix,
+            GLint viewMatrix)
             : program_(program),
               position_(position),
               uv_(uv),
-              projectionMatrix_(projectionMatrix) {}
+              projectionMatrix_(projectionMatrix),
+              viewMatrix_(viewMatrix)
+              {}
 
     GLuint program_;
     GLint position_;
     GLint uv_;
     GLint projectionMatrix_;
+    GLint viewMatrix_;
 };
 
 #endif //ANDROIDGLINVESTIGATIONS_SHADER_H

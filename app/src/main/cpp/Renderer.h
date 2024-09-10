@@ -58,6 +58,10 @@ private:
      */
     void createModels();
 
+    void createHZB();
+
+    GLuint CreateTexture(int width, int height, uint internal_format, uint format, uint size);
+
     android_app *app_;
     EGLDisplay display_;
     EGLSurface surface_;
@@ -67,11 +71,21 @@ private:
 
     bool shaderNeedsNewProjectionMatrix_;
 
-    std::unique_ptr<Shader> shader_;
+    std::unique_ptr<Shader> basePassShader;
+    std::unique_ptr<Shader> finalPassShader;
+    std::unique_ptr<Shader> hzbPassShader;
     std::vector<Model> models_;
     std::vector<std::shared_ptr<FModel>> models;
 
     std::shared_ptr<TextureAsset> BaseColor;
+
+    GLuint HZBuffer;
+
+    GLuint SceneTexture;
+    GLuint SceneDepthTexture;
+    GLuint SceneFBO;
+
+    FQuad Quad;
 };
 
 #endif //ANDROIDGLINVESTIGATIONS_RENDERER_H

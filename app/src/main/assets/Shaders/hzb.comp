@@ -1,0 +1,78 @@
+#version 310 es
+
+precision highp float;
+precision highp int;
+layout( local_size_x = 8, local_size_y = 8, local_size_z = 1 ) in;
+
+uniform bool isFirst;
+uniform writeonly layout(rgba16f, binding=0) highp image2D output0;
+uniform writeonly layout(rgba16f, binding=1) highp image2D output1;
+uniform writeonly layout(rgba16f, binding=2) highp image2D output2;
+uniform writeonly layout(rgba16f, binding=3) highp image2D output3;
+uniform readonly layout(rgba16f, binding=4) highp image2D input0;
+uniform highp sampler2D parentTexture;
+
+uint SignedRightShift(uint x, int bitshift)
+{
+	if (bitshift > 0)
+	{
+		return x << uint(bitshift);
+	}
+	else if (bitshift < 0)
+	{
+		return x >> uint(-bitshift);
+	}
+	return x;
+}
+
+uvec2 InitialTilePixelPositionForReduction2x2(uint TileSizeLog2, uint SharedArrayId)
+{
+    uint x = 0u;
+	uint y = 0u;
+
+	for (uint i = 0u; i < TileSizeLog2; i++)
+	{
+		uint DestBitId = TileSizeLog2 - 1u - i;
+		uint DestBitMask = 1u << DestBitId;
+		x |= DestBitMask & SignedRightShift(SharedArrayId, int(DestBitId) - int(i * 2u + 0u));
+		y |= DestBitMask & SignedRightShift(SharedArrayId, int(DestBitId) - int(i * 2u + 1u));
+	}
+
+	return uvec2(x, y);
+}
+
+#define MAX_MIP_BATCH_SIZE 4u
+#define GROUP_TILE_SIZE 8u
+
+void main()
+{
+    uint GroupId = gl_WorkGroupID.x;
+    uint GroupThreadIndex = gl_LocalInvocationIndex;
+
+    uvec2 GroupThreadId = InitialTilePixelPositionForReduction2x2(MAX_MIP_BATCH_SIZE - 1u, GroupThreadIndex);
+
+    uvec2 DispatchThreadId = GROUP_TILE_SIZE * GroupId + GroupThreadId;
+	
+    uvec2 OutputPixelPos = uvec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
+
+    float SampleValue = 0.0;
+    if (isFirst)
+    {
+        SampleValue = textureLod(parentTexture, vec2(OutputPixelPos) * vec2(1.0/1024.0, 1.0/512.0), 0.0).r;
+    }
+    else
+    {
+        // SampleValue = textureLod(parentTexture, vec2(OutputPixelPos) * vec2(1.0/64.0, 1.0/32.0), 3.0).r;
+        // SampleValue = texelFetch(parentTexture, ivec2(OutputPixelPos), 0.0).r;
+        SampleValue = imageLoad(input0, ivec2(OutputPixelPos)*2).r;
+    }
+    vec4 result;
+    result.x = SampleValue;//float(gl_LocalInvocationIndex);
+    result.y = float(OutputPixelPos.x);
+    result.z = float(OutputPixelPos.y);
+    result.w = float(GroupThreadIndex);
+    imageStore(output0, ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y), result);
+    imageStore(output1, ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y)/2, result);
+    imageStore(output2, ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y)/4, result);
+    imageStore(output3, ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y)/8, result);
+}

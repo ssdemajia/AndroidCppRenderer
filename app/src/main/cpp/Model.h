@@ -103,5 +103,18 @@ private:
     std::vector<FVertex> vertices;
 };
 
+struct FMeshPrimitive {
+    FMeshPrimitive(unsigned int numVertex) : numVertices(numVertex) {};
+    void draw(const unsigned int readTex1 = 0, const unsigned int readTex2 = 0, const unsigned int readTex3 = 0);
+    virtual void setup() = 0;
+    unsigned int VAO = -1;
+    unsigned int VBO = -1;
+    const unsigned int numVertices=0;
+};
 
+struct FQuad : public FMeshPrimitive {
+    FQuad() : FMeshPrimitive(6) {};
+    void draw(const unsigned int readTex1 = 0, const unsigned int readTex2 = 0, const unsigned int readTex3 = 0);
+    void setup();
+};
 #endif //ANDROIDGLINVESTIGATIONS_MODEL_H

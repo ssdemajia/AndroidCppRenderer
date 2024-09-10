@@ -2,7 +2,11 @@
 #define ANDROIDGLINVESTIGATIONS_SHADER_H
 
 #include <string>
-#include <GLES3/gl3.h>
+#include <android/asset_manager.h>
+#include <GLES3/gl31.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include "AndroidOut.h"
 
 class Model;
 
@@ -15,25 +19,13 @@ class Model;
  */
 class Shader {
 public:
-    /*!
-     * Loads a shader given the full sourcecode and names for necessary attributes and uniforms to
-     * link to. Returns a valid shader on success or null on failure. Shader resources are
-     * automatically cleaned up on destruction.
-     *
-     * @param vertexSource The full source code for your vertex program
-     * @param fragmentSource The full source code of your fragment program
-     * @param positionAttributeName The name of the position attribute in your vertex program
-     * @param uvAttributeName The name of the uv coordinate attribute in your vertex program
-     * @param projectionMatrixUniformName The name of your model/view/projection matrix uniform
-     * @return a valid Shader on success, otherwise null.
-     */
-    static Shader *loadShader(
-            const std::string &vertexSource,
-            const std::string &fragmentSource,
-            const std::string &positionAttributeName,
-            const std::string &uvAttributeName,
-            const std::string &projectionMatrixUniformName,
-            const std::string &viewMatrixUniformName);
+    static Shader* loadShader(AAssetManager *assetManager, const std::string &vertexPath, const std::string &fragmentPath);
+
+    static Shader* loadShader(AAssetManager *assetManager, const std::string &computePath);
+
+    static Shader *loadShader(const std::string &vertexSource, const std::string &fragmentSource);
+
+    static Shader * loadShader(const std::string& computeSource);
 
     inline ~Shader() {
         if (program_) {
@@ -42,6 +34,21 @@ public:
         }
     }
 
+    void Set(const std::string& name, glm::mat4& mat) const
+    {
+        int location = glGetUniformLocation(program_, name.c_str());
+        if (location == -1)
+            aout << "[ERROR]SetMatrix(\"" << name << "\") Failed" << std::endl;
+        glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(mat));
+    }
+
+    void Set(const std::string& name, bool value) const
+    {
+        int location = glGetUniformLocation(program_, name.c_str());
+        if (location == -1)
+            aout << "[ERROR]Set bool(\"" << name << "\") Failed" << std::endl;
+        glUniform1i(location, (int)value);
+    }
     /*!
      * Prepares the shader for use, call this before executing any draw commands
      */
@@ -52,19 +59,19 @@ public:
      */
     void deactivate() const;
 
-    /*!
-     * Renders a single model
-     * @param model a model to render
-     */
-    void drawModel(const Model &model) const;
+//    /*!
+//     * Renders a single model
+//     * @param model a model to render
+//     */
+//    void drawModel(const Model &model) const;
 
-    /*!
-     * Sets the model/view/projection matrix in the shader.
-     * @param projectionMatrix sixteen floats, column major, defining an OpenGL projection matrix.
-     */
-    void setProjectionMatrix(float *projectionMatrix) const;
-
-    void setViewMatrix(float* InViewMatrix) const;
+//    /*!
+//     * Sets the model/view/projection matrix in the shader.
+//     * @param projectionMatrix sixteen floats, column major, defining an OpenGL projection matrix.
+//     */
+//    void setProjectionMatrix(float *projectionMatrix) const;
+//
+//    void setViewMatrix(float* InViewMatrix) const;
 private:
     /*!
      * Helper function to load a shader of a given type
@@ -81,24 +88,11 @@ private:
      * @param uv the attribute location of the uv coordinates
      * @param projectionMatrix the uniform location of the projection matrix
      */
-    constexpr Shader(
-            GLuint program,
-            GLint position,
-            GLint uv,
-            GLint projectionMatrix,
-            GLint viewMatrix)
-            : program_(program),
-              position_(position),
-              uv_(uv),
-              projectionMatrix_(projectionMatrix),
-              viewMatrix_(viewMatrix)
-              {}
+    constexpr Shader(GLuint program)
+            : program_(program) {}
 
     GLuint program_;
-    GLint position_;
-    GLint uv_;
-    GLint projectionMatrix_;
-    GLint viewMatrix_;
+
 };
 
 #endif //ANDROIDGLINVESTIGATIONS_SHADER_H

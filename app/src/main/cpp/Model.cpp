@@ -145,3 +145,65 @@ void FModel::Draw()
     }
     glBindVertexArray(0);
 }
+
+void FMeshPrimitive::draw(const unsigned int readTex1, const unsigned int readTex2, const unsigned int readTex3)
+{
+    glBindVertexArray(VAO);
+    if (readTex1 != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, readTex1);
+    }
+
+    if (readTex2 != 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, readTex2);
+    }
+
+    if (readTex3 != 0) {
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, readTex3);
+    }
+
+    glDrawArrays(GL_TRIANGLES, 0, numVertices);
+}
+
+void FQuad::draw(const unsigned int readTex1, const unsigned int readTex2, const unsigned int readTex3)
+{
+    glDisable(GL_DEPTH_TEST);
+    FMeshPrimitive::draw(readTex1, readTex2, readTex3);
+}
+
+void FQuad::setup()
+{
+    const float quadVertices[] = {
+            //positions //texCoordinates
+            -1.0f, 1.0f, 0.0f, 1.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f,
+            1.0f, -1.0f, 1.0f, 0.0f,
+
+            -1.0f, 1.0f, 0.0f, 1.0f,
+            1.0f, -1.0f, 1.0f, 0.0f,
+            1.0f, 1.0f, 1.0f, 1.0f
+    };
+
+    //OpenGL postprocessing quad setup
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+
+    //Bind Vertex Array Object and VBO in correct order
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+    //VBO initialization
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+
+    //Quad position pointer initialization in attribute array
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+
+    //Quad texcoords pointer initialization in attribute array
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+
+    glBindVertexArray(0);
+}

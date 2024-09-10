@@ -161,7 +161,7 @@ void Renderer::initRenderer() {
     EGLSurface surface = eglCreateWindowSurface(display, config, app_->window, nullptr);
 
     // Create a GLES 3 context
-    EGLint contextAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
+    EGLint contextAttribs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 1, EGL_NONE};
     EGLContext context = eglCreateContext(display, config, nullptr, contextAttribs);
 
     // get some window metrics
@@ -181,13 +181,15 @@ void Renderer::initRenderer() {
     PRINT_GL_STRING(GL_VERSION);
     PRINT_GL_STRING_AS_LIST(GL_EXTENSIONS);
 
-    shader_ = std::unique_ptr<Shader>(
-            Shader::loadShader(vertex, fragment, "aPosition", "aTexCoord", "uProjection", "uView"));
-    assert(shader_);
+    basePassShader = std::unique_ptr<Shader>(
+            Shader::loadShader(vertex, fragment));
+    assert(basePassShader);
 
-    // Note: there's only one shader in this demo, so I'll activate it here. For a more complex game
-    // you'll want to track the active shader and activate/deactivate it as necessary
-    shader_->activate();
+    finalPassShader = std::unique_ptr<Shader>(Shader::loadShader(app_->activity->assetManager, "Shaders/quad.vs", "Shaders/quad.fs"));
+    assert(finalPassShader);
+
+    hzbPassShader = std::unique_ptr<Shader>(Shader::loadShader(app_->activity->assetManager, "Shaders/hzb.comp"));
+    assert(hzbPassShader);
 
     // setup any other gl related global states
     glClearColor(CORNFLOWER_BLUE);
@@ -198,6 +200,11 @@ void Renderer::initRenderer() {
 
     // get some demo models into memory
     createModels();
+
+    // hzb
+    createHZB();
+
+    Quad.setup();
 }
 
 void Renderer::updateRenderArea() {
@@ -214,7 +221,41 @@ void Renderer::updateRenderArea() {
 
         // make sure that we lazily recreate the projection matrix before we render
         shaderNeedsNewProjectionMatrix_ = true;
+
+        SceneTexture = CreateTexture(width_, height_, GL_RGBA16F, GL_RGBA, GL_FLOAT);
+
+        {
+            glGenTextures(1, &SceneDepthTexture);
+            glBindTexture(GL_TEXTURE_2D, SceneDepthTexture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH32F_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV
+                    , nullptr);  // target, level, internal_format, width, height, border, format, type, data
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        glGenFramebuffers(1, &SceneFBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, SceneFBO);
+        glViewport(0, 0, width_, height_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, SceneDepthTexture, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, SceneTexture, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
+}
+
+GLuint Renderer::CreateTexture(int width, int height, uint internal_format, uint format, uint size)
+{
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, size, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);  // �ڱ�Եʱ���ظ�
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return texture;
 }
 
 /**
@@ -345,53 +386,95 @@ void Renderer::render() {
     // changed.
     updateRenderArea();
 
-    // When the renderable area changes, the projection matrix has to also be updated. This is true
-    // even if you change from the sample orthographic projection matrix as your aspect ratio has
-    // likely changed.
-    if (shaderNeedsNewProjectionMatrix_) {
-        // a placeholder projection matrix allocated on the stack. Column-major memory layout
-//        float projectionMatrix[16] = {0};
-
-        // build an orthographic projection matrix for 2d rendering
-//        Utility::buildOrthographicMatrix(
-//                projectionMatrix,
-//                kProjectionHalfHeight,
-//                float(width_) / height_,
-//                kProjectionNearPlane,
-//                kProjectionFarPlane);
-        glm::mat4 projectionMatrix = glm::perspective(glm::radians(90.0f), float(width_) / height_, 0.1f, 10000.0f);
-
-        // send the matrix to the shader
-        // Note: the shader must be active for this to work. Since we only have one shader for this
-        // demo, we can assume that it's active.
-        shader_->setProjectionMatrix(glm::value_ptr(projectionMatrix));
-
-        // make sure the matrix isn't generated every frame
-        shaderNeedsNewProjectionMatrix_ = false;
-    }
-    glm::mat4 View = glm::translate(glm::vec3(0, 0, -5.0));
-    shader_->setViewMatrix(glm::value_ptr(View));
-    // clear the color buffer
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    // Render all the models. There's no depth testing in this sample so they're accepted in the
-    // order provided. But the sample EGL setup requests a 24 bit depth buffer so you could
-    // configure it at the end of initRenderer
-//    if (!models_.empty()) {
-//        for (const auto &model: models_) {
-//            shader_->drawModel(model);
-//        }
-//    }
-
-    for (const auto& model : models)
     {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, BaseColor->getTextureID());
-        model->Draw();
+        // BasePass render
+        basePassShader->activate();
+        glBindFramebuffer(GL_FRAMEBUFFER, SceneFBO);
+        if (shaderNeedsNewProjectionMatrix_) {
+            glm::mat4 projectionMatrix = glm::perspective(glm::radians(90.0f),
+                                                          float(width_) / height_, 0.1f, 10000.0f);
+            basePassShader->Set("uProjection", projectionMatrix);
+            // make sure the matrix isn't generated every frame
+            shaderNeedsNewProjectionMatrix_ = false;
+        }
+        glm::mat4 View = glm::translate(glm::vec3(0, 0, -5.0));
+        basePassShader->Set("uView", View);
+        // clear the color buffer
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+
+        for (const auto &model: models) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, BaseColor->getTextureID());
+            model->Draw();
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        basePassShader->deactivate();
     }
 
-    // Present the rendered image. This is an implicit glFlush.
-    auto swapResult = eglSwapBuffers(display_, surface_);
-    assert(swapResult == EGL_TRUE);
+    {
+        hzbPassShader->activate();
+        uint32_t Batch = 4;
+        uint32_t MipCount = 8;
+        uint32_t Width = 1024;
+        uint32_t Height = 512;
+        for (int i = 0; i < MipCount; i += Batch)
+        {
+            uint32_t currW = Width / (1 << i);
+            uint32_t currH = Height / (1 << i);
+            glActiveTexture(GL_TEXTURE0);
+            if (i == 0)
+            {
+                glBindTexture(GL_TEXTURE_2D, SceneDepthTexture);
+            }
+            else
+            {
+//                glBindTexture(GL_TEXTURE_2D, HZBuffer);
+//                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, i - 1);
+//                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, i - 1);
+                glBindImageTexture(4u, HZBuffer, i-1, false, 0, GL_READ_ONLY, GL_RGBA16F);
+            }
+            hzbPassShader->Set("isFirst", i == 0);
+            glBindImageTexture(0u, HZBuffer, i, false, 0, GL_WRITE_ONLY, GL_RGBA16F);
+            glBindImageTexture(1u, HZBuffer, i+1, false, 0, GL_WRITE_ONLY, GL_RGBA16F);
+            glBindImageTexture(2u, HZBuffer, i+2, false, 0, GL_WRITE_ONLY, GL_RGBA16F);
+            glBindImageTexture(3u, HZBuffer, i+3, false, 0, GL_WRITE_ONLY, GL_RGBA16F);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glDispatchCompute(currW / 8, currH / 8, 1);
+        }
+        hzbPassShader->deactivate();
+        glBindTexture(GL_TEXTURE_2D, HZBuffer);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 9);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    {
+        // SceneTexture to backbuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        finalPassShader->activate();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        Quad.draw(SceneTexture);
+        finalPassShader->deactivate();
+        // Present the rendered image. This is an implicit glFlush.
+        auto swapResult = eglSwapBuffers(display_, surface_);
+        assert(swapResult == EGL_TRUE);
+    }
+}
+
+void Renderer::createHZB() {
+    glGenTextures(1, &HZBuffer);
+    glBindTexture(GL_TEXTURE_2D, HZBuffer);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 9);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexStorage2D(GL_TEXTURE_2D, 10, GL_RGBA16F, 1024, 512);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }

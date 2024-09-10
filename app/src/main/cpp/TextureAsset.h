@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <android/asset_manager.h>
-#include <GLES3/gl3.h>
+#include <GLES3/gl31.h>
 #include <string>
 #include <vector>
 
